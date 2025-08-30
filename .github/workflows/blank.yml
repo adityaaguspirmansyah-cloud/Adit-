@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout kernel source
         uses: actions/checkout@v3
@@ -16,43 +17,37 @@ jobs:
       - name: Setup environment
         run: |
           sudo apt update
-          sudo apt install -y git bc build-essential flex bison \
-            libssl-dev libc6-dev libncurses5-dev libncursesw5-dev \
-            libelf-dev ccache python3 clang lld curl zip unzip
+          sudo apt install -y git bc build-essential libssl-dev \
+            libc6-dev libncurses5-dev libelf-dev ccache \
+            python3 clang llvm lld flex bison zip unzip
 
       - name: Clone Proton Clang
         run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ~/clang
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
 
       - name: Build kernel
         run: |
-          export PATH=~/clang/bin:$PATH
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           export ARCH=arm64
           export SUBARCH=arm64
-          export CC=clang
-          export LLVM=1
-          export LLVM_IAS=1
-          mkdir -p out
+          export KBUILD_BUILD_USER=github
+          export KBUILD_BUILD_HOST=actions
+
           make O=out begonia_defconfig
-          make -j$(nproc) O=out \
+          make -j$(nproc --all) O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump STRIP=llvm-strip
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-      - name: Setup AnyKernel3
+      - name: Pack AnyKernel3
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel/
-          cd AnyKernel
-          sed -i 's/^device.name1=.*/device.name1=begonia/' anykernel.sh || true
-          sed -i 's/^is_slot_device=.*/is_slot_device=0/' anykernel.sh || true
-          sed -i 's/^ramdisk=.*/ramdisk=false/' anykernel.sh || true
-          zip -r9 Begonia-Kernel-A13.zip * -x .git* README* .gitignore
+          git clone https://github.com/osm0sis/AnyKernel3
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cd AnyKernel3
+          zip -r9 Begonia-Kernel.zip *
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
           name: Begonia-Kernel-ZIP
-          path: AnyKernel/Begonia-Kernel-A13.zip
+          path: AnyKernel3/Begonia-Kernel.zip
